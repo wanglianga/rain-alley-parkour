@@ -81,15 +81,15 @@ class Obstacle {
     const g = new PIXI.Graphics();
     
     g.beginFill(0x4a90d9);
-    g.ellipse(0, 0, 50, 20);
+    g.drawEllipse(0, 0, 50, 20);
     g.endFill();
     
     g.beginFill(0x7ab8e8);
-    g.ellipse(-10, -3, 25, 10);
+    g.drawEllipse(-10, -3, 25, 10);
     g.endFill();
     
     g.beginFill(0xa8d8ea);
-    g.ellipse(5, -5, 10, 4);
+    g.drawEllipse(5, -5, 10, 4);
     g.endFill();
     
     this.width = 100;

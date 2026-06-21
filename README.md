@@ -44,7 +44,7 @@ npm install
 npm run dev
 ```
 
-访问地址：http://localhost:3000
+访问地址：http://localhost:5173
 
 #### 3. 构建生产版本
 
@@ -81,7 +81,7 @@ docker compose up --build
 docker compose up --build -d
 ```
 
-访问地址：http://localhost:3000
+访问地址：http://localhost:5173
 
 #### 2. 停止服务
 
