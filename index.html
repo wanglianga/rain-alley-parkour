@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>雨巷纸伞 - 跑酷游戏</title>
+  <link rel="stylesheet" href="./src/style.css">
+</head>
+<body>
+  <div id="game-container"></div>
+  <div id="ui-overlay">
+    <div id="start-screen" class="screen active">
+      <h1 class="title">雨巷纸伞</h1>
+      <p class="subtitle">在雨中老街递送纸伞</p>
+      <div class="instructions">
+        <h3>操作说明</h3>
+        <ul>
+          <li><span class="key">←</span><span class="key">→</span> 左右移动 / 贴墙转弯</li>
+          <li><span class="key">空格</span> 开伞滑翔 / 收伞冲刺</li>
+          <li><span class="key">R</span> 短暂修补伞面</li>
+          <li><span class="key">↓</span> 快速下落</li>
+        </ul>
+      </div>
+      <div class="tips">
+        <h3>游戏提示</h3>
+        <p>· 借屋檐避雨可减少伞面损耗</p>
+        <p>· 踩水坑可短暂加速</p>
+        <p>· 避开风口和障碍物</p>
+        <p>· 收集油纸和蜡块修复伞面</p>
+      </div>
+      <button id="start-btn" class="btn-primary">开始游戏</button>
+    </div>
+
+    <div id="game-hud" class="screen">
+      <div class="hud-top">
+        <div class="hud-item">
+          <span class="hud-label">距离</span>
+          <span id="distance" class="hud-value">0</span>
+          <span class="hud-unit">米</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">分数</span>
+          <span id="score" class="hud-value">0</span>
+        </div>
+      </div>
+      <div class="hud-left">
+        <div class="umbrella-durability">
+          <span class="durability-label">伞面耐久</span>
+          <div class="durability-bar">
+            <div id="durability-fill" class="durability-fill"></div>
+          </div>
+          <span id="durability-text" class="durability-text">100%</span>
+        </div>
+      </div>
+      <div class="hud-right">
+        <div class="speed-indicator">
+          <span class="speed-label">速度</span>
+          <div class="speed-bar">
+            <div id="speed-fill" class="speed-fill"></div>
+          </div>
+        </div>
+      </div>
+      <div id="weather-indicator" class="weather-indicator">
+        <span id="weather-icon">🌧️</span>
+        <span id="weather-text">小雨</span>
+      </div>
+    </div>
+
+    <div id="end-screen" class="screen">
+      <h2 class="end-title">纸伞破损</h2>
+      <div class="end-stats">
+        <div class="stat-item">
+          <span class="stat-label">递送距离</span>
+          <span id="final-distance" class="stat-value">0 米</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">最终得分</span>
+          <span id="final-score" class="stat-value">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">最高速度</span>
+          <span id="final-speed" class="stat-value">0 m/s</span>
+        </div>
+      </div>
+      <button id="restart-btn" class="btn-primary">再来一次</button>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
