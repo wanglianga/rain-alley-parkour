@@ -67,6 +67,9 @@ export class Game {
     this.globalWindStrength = 0;
     this.globalWindTimer = 0;
     
+    this.nearWindDirection = 0;
+    this.nearWindStrength = 0;
+    
     this.isRepairing = false;
     this.repairTimer = 0;
     this.repairObstacle = null;
@@ -138,6 +141,8 @@ export class Game {
     this.globalWindDirection = 0;
     this.globalWindStrength = 0;
     this.globalWindTimer = 0;
+    this.nearWindDirection = 0;
+    this.nearWindStrength = 0;
     this.isRepairing = false;
     this.repairTimer = 0;
     this.repairObstacle = null;
@@ -269,10 +274,43 @@ export class Game {
   }
   
   updateUmbrellaTiltWarning(dt) {
-    if (this.globalWindStrength > 0 || this.player.windPushTimer > 0) {
-      this.umbrellaTiltWarning = Math.min(1, this.umbrellaTiltWarning + dt * 2);
+    let nearWindZone = false;
+    let nearWindDir = 0;
+    let nearWindStr = 0;
+    
+    if (this.globalWindStrength > 0) {
+      nearWindZone = true;
+      nearWindDir = this.globalWindDirection;
+      nearWindStr = this.globalWindStrength;
+    }
+    
+    const playerBounds = this.player.getBounds();
+    const obstacles = this.obstacleManager.getObstacles();
+    for (const obstacle of obstacles) {
+      if (!obstacle.active) continue;
+      if (obstacle.type !== 'alley' && obstacle.type !== 'bridge_wind' && obstacle.type !== 'building_gap') continue;
+      
+      const obsBounds = obstacle.getBounds();
+      const proximityY = Math.abs(playerBounds.y - obsBounds.y);
+      if (proximityY < 250) {
+        const absWind = Math.abs(obstacle.windDirection);
+        if (absWind > 0.15) {
+          nearWindZone = true;
+          const sign = obstacle.windDirection > 0 ? 1 : -1;
+          nearWindDir = sign;
+          nearWindStr = Math.max(nearWindStr, obstacle.strength * absWind);
+        }
+      }
+    }
+    
+    if (nearWindZone) {
+      this.umbrellaTiltWarning = Math.min(1, this.umbrellaTiltWarning + dt * 3);
+      this.nearWindDirection = nearWindDir;
+      this.nearWindStrength = nearWindStr;
     } else {
       this.umbrellaTiltWarning = Math.max(0, this.umbrellaTiltWarning - dt * 2);
+      this.nearWindDirection = 0;
+      this.nearWindStrength = 0;
     }
   }
   
@@ -419,23 +457,27 @@ export class Game {
     }
     
     if (obstacle.type === 'alley' || obstacle.type === 'bridge_wind' || obstacle.type === 'building_gap') {
-      const windDir = obstacle.windDirection !== 0 ? obstacle.windDirection : (Math.random() > 0.5 ? 1 : -1);
-      const pushStrength = obstacle.strength * (this.player.umbrellaOpen ? 1.5 : 0.8);
-      
-      this.player.windPush = windDir * pushStrength;
-      this.player.windPushTimer = 0.5;
-      
-      let damage = obstacle.durabilityDamage;
-      if (this.player.umbrellaOpen) {
-        damage *= 0.6;
-        this.addScore(10);
-      } else {
-        damage *= 1.2;
+      if (!obstacle.isWindZone) {
+        obstacle.isWindZone = true;
       }
-      this.player.durability -= damage;
       
-      if (this.onWarningUpdate) {
-        this.onWarningUpdate({ type: 'wind', message: obstacle.type === 'alley' ? '巷口阵风！' : obstacle.type === 'bridge_wind' ? '桥面横风！' : '高楼夹缝气流！', duration: 1.5 });
+      const windDir = obstacle.windDirection;
+      const absWind = Math.abs(windDir);
+      
+      if (absWind > 0.05) {
+        const dirSign = windDir > 0 ? 1 : -1;
+        const pushStrength = obstacle.strength * absWind * (this.player.umbrellaOpen ? 1.5 : 0.8);
+        this.player.windPush = dirSign * pushStrength;
+        this.player.windPushTimer = 0.12;
+        
+        let damage = obstacle.durabilityDamage * absWind * 0.25;
+        if (this.player.umbrellaOpen) {
+          damage *= 0.6;
+          this.addScore(Math.floor(absWind * 3));
+        } else {
+          damage *= 1.2;
+        }
+        this.player.durability -= damage;
       }
       return;
     }

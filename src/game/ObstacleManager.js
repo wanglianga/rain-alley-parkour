@@ -17,14 +17,34 @@ class Obstacle {
     this.strength = 1;
     
     this.windDirection = 0;
+    this.windPhase = 0;
     this.windTimer = 0;
-    this.windPeriod = 2 + Math.random() * 2;
+    this.windPeriod = 2;
+    this.lastWarningPhase = -1;
+    this.windIndicator = null;
+    this.windArrows = [];
+    this.isWindZone = false;
+    this.windFade = 0;
     
     this.repairAmount = 40;
     this.repairDuration = 2;
     this.used = false;
     
     this.createGraphics();
+    
+    if (this.type === 'alley') {
+      this.windPeriod = 2.5;
+      this.strength = 2;
+      this.durabilityDamage = 5;
+    } else if (this.type === 'bridge_wind') {
+      this.windPeriod = 3;
+      this.strength = 2.5;
+      this.durabilityDamage = 8;
+    } else if (this.type === 'building_gap') {
+      this.windPeriod = 1.8;
+      this.strength = 3;
+      this.durabilityDamage = 10;
+    }
   }
   
   createGraphics() {
@@ -592,18 +612,108 @@ class Obstacle {
     
     if (this.type === 'alley' || this.type === 'bridge_wind' || this.type === 'building_gap') {
       this.windTimer += dt;
-      if (this.windTimer >= this.windPeriod) {
-        this.windTimer = 0;
-        this.windDirection = (this.windDirection + 1) % 3 - 1;
+      
+      const phaseRatio = (this.windTimer % this.windPeriod) / this.windPeriod;
+      this.windPhase = Math.floor(phaseRatio * 4);
+      
+      let targetDir = 0;
+      let targetFade = 0;
+      
+      switch (this.windPhase) {
+        case 0:
+          targetDir = -1;
+          targetFade = 1;
+          break;
+        case 1:
+          targetDir = 0;
+          targetFade = 0;
+          break;
+        case 2:
+          targetDir = 1;
+          targetFade = 1;
+          break;
+        case 3:
+          targetDir = 0;
+          targetFade = 0;
+          break;
       }
       
-      if (this.container.children.length > 0) {
-        this.container.rotation = this.windDirection * 0.05;
+      const phaseProgress = (phaseRatio * 4) - this.windPhase;
+      const fadeSpeed = 6;
+      
+      if (targetFade === 1) {
+        this.windFade = Math.min(1, this.windFade + fadeSpeed * dt);
+      } else {
+        this.windFade = Math.max(0, this.windFade - fadeSpeed * dt);
       }
+      
+      this.windDirection = targetDir * this.windFade;
+      
+      if (this.windPhase !== this.lastWarningPhase) {
+        this.lastWarningPhase = this.windPhase;
+        
+        if (this.windPhase === 0 || this.windPhase === 2) {
+          const dirText = this.windPhase === 0 ? '← 左风' : '右风 →';
+          const zoneName = this.type === 'alley' ? '巷口' : this.type === 'bridge_wind' ? '桥面' : '高楼夹缝';
+          
+          if (this.game.onWarningUpdate) {
+            this.game.onWarningUpdate({
+              type: 'wind',
+              message: zoneName + '：' + dirText,
+              duration: 0.8
+            });
+          }
+        }
+      }
+      
+      this.updateWindVisuals(this.windDirection);
     }
     
     if (this.type === 'wind_chime') {
       this.container.rotation = Math.sin(this.game.gameTime * 4) * 0.15;
+    }
+  }
+  
+  updateWindVisuals(windValue) {
+    if (!this.windIndicator) {
+      this.windIndicator = new PIXI.Container();
+      this.container.addChild(this.windIndicator);
+      
+      for (let i = 0; i < 4; i++) {
+        const arrow = new PIXI.Graphics();
+        this.windIndicator.addChild(arrow);
+        this.windArrows.push(arrow);
+      }
+    }
+    
+    const dir = windValue > 0 ? 1 : (windValue < 0 ? -1 : 0);
+    const intensity = Math.abs(windValue);
+    
+    for (let i = 0; i < this.windArrows.length; i++) {
+      const arrow = this.windArrows[i];
+      arrow.clear();
+      
+      if (intensity > 0.05) {
+        const yOffset = -80 + i * 22;
+        const arrowLength = 12 + intensity * 18;
+        const headSize = 5 + intensity * 4;
+        
+        arrow.lineStyle(2 + intensity * 1.5, 0xf5d76e, 0.5 + intensity * 0.5);
+        if (dir > 0) {
+          arrow.moveTo(-arrowLength, yOffset);
+          arrow.lineTo(arrowLength, yOffset);
+          arrow.lineTo(arrowLength - headSize, yOffset - headSize);
+          arrow.moveTo(arrowLength, yOffset);
+          arrow.lineTo(arrowLength - headSize, yOffset + headSize);
+        } else {
+          arrow.moveTo(arrowLength, yOffset);
+          arrow.lineTo(-arrowLength, yOffset);
+          arrow.lineTo(-arrowLength + headSize, yOffset - headSize);
+          arrow.moveTo(-arrowLength, yOffset);
+          arrow.lineTo(-arrowLength + headSize, yOffset + headSize);
+        }
+        arrow.endFill();
+      }
     }
   }
   
