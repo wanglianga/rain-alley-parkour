@@ -43,6 +43,10 @@ export class Player {
     
     this.velocityY = 0;
     this.isGrounded = true;
+    
+    this.umbrellaWobble = 0;
+    this.umbrellaTearAlpha = 0;
+    this.tearGraphics = null;
   }
   
   init() {
@@ -149,6 +153,9 @@ export class Player {
     this.umbrellaCanopy.addChild(canopy);
     this.umbrella.addChild(this.umbrellaCanopy);
     
+    this.tearGraphics = new PIXI.Graphics();
+    this.umbrellaCanopy.addChild(this.tearGraphics);
+    
     this.umbrella.pivot.set(0, -10);
     this.umbrella.y = -20;
     this.container.addChild(this.umbrella);
@@ -193,15 +200,20 @@ export class Player {
       }
     }
     
+    const durabilityFactor = this.durability / 100;
+    const isLowDurability = this.durability < 40;
+    const isCriticalDurability = this.durability < 20;
+    
     const targetProgress = this.umbrellaOpen ? 1 : 0;
-    this.umbrellaAnimProgress += (targetProgress - this.umbrellaAnimProgress) * 8 * dt;
+    const animSpeed = isCriticalDurability ? 3 : (isLowDurability ? 5 : 8);
+    this.umbrellaAnimProgress += (targetProgress - this.umbrellaAnimProgress) * animSpeed * dt;
     
     const scale = 0.3 + this.umbrellaAnimProgress * 0.7;
     this.umbrellaCanopy.scale.set(scale, scale);
     
     if (this.splashBoostTimer > 0) {
       this.splashBoostTimer -= dt;
-      this.game.speedMultiplier = 1.5;
+      this.game.speedMultiplier = isLowDurability ? 1.3 : 1.5;
       if (this.splashBoostTimer <= 0) {
         this.game.speedMultiplier = 1;
       }
@@ -209,7 +221,8 @@ export class Player {
     
     if (this.windPushTimer > 0) {
       this.windPushTimer -= dt;
-      this.container.x += this.windPush * dt * 60;
+      const windMultiplier = isCriticalDurability ? 1.8 : (isLowDurability ? 1.3 : 1);
+      this.container.x += this.windPush * windMultiplier * dt * 60;
       this.windPush *= 0.95;
     }
     
@@ -231,24 +244,69 @@ export class Player {
     this.updateDurability(dt);
     
     this.bobTimer += dt * 4;
-    this.bobOffset = Math.sin(this.bobTimer) * 2;
+    const bobAmplitude = isCriticalDurability ? 4 : (isLowDurability ? 3 : 2);
+    this.bobOffset = Math.sin(this.bobTimer) * bobAmplitude;
     
     if (this.isTurning) {
-      const targetTilt = this.turnDirection * 0.2;
-      this.turnTilt += (targetTilt - this.turnTilt) * 5 * dt;
+      const turnResponsiveness = isCriticalDurability ? 2 : (isLowDurability ? 3.5 : 5);
+      const targetTilt = this.turnDirection * (isCriticalDurability ? 0.35 : (isLowDurability ? 0.28 : 0.2));
+      this.turnTilt += (targetTilt - this.turnTilt) * turnResponsiveness * dt;
     } else {
-      this.turnTilt *= 0.9;
+      this.turnTilt *= isCriticalDurability ? 0.96 : (isLowDurability ? 0.93 : 0.9);
     }
     
     this.body.rotation = this.turnTilt * 0.5;
-    this.umbrella.rotation = this.turnTilt * 0.3;
+    
+    let umbrellaRotation = this.turnTilt * 0.3;
+    
+    if (this.game.umbrellaTiltWarning > 0 && this.umbrellaOpen) {
+      const windTilt = this.game.globalWindDirection * this.game.globalWindStrength * 0.2 * this.game.umbrellaTiltWarning;
+      umbrellaRotation += windTilt;
+    }
+    
+    if (isLowDurability && this.umbrellaOpen) {
+      this.umbrellaWobble += dt * (isCriticalDurability ? 12 : 8);
+      umbrellaRotation += Math.sin(this.umbrellaWobble) * (isCriticalDurability ? 0.12 : 0.06);
+    }
     
     if (this.umbrellaOpen && !this.isGrounded) {
-      this.umbrella.rotation += Math.sin(this.game.gameTime * 3) * 0.02;
+      umbrellaRotation += Math.sin(this.game.gameTime * 3) * 0.02;
     }
+    
+    this.umbrella.rotation = umbrellaRotation;
+    
+    this.updateUmbrellaTears(durabilityFactor);
     
     if (this.durability <= 0) {
       this.game.stop();
+    }
+  }
+  
+  updateUmbrellaTears(durabilityFactor) {
+    if (!this.tearGraphics) return;
+    
+    this.tearGraphics.clear();
+    
+    if (durabilityFactor < 0.9) {
+      const tearCount = Math.floor((1 - durabilityFactor) * 12);
+      this.tearGraphics.lineStyle(1.5, 0x2c1810, 0.8);
+      
+      for (let i = 0; i < tearCount; i++) {
+        const angle = (i / 12) * Math.PI - Math.PI / 2;
+        const startR = 25 + Math.random() * 15;
+        const endR = startR + 10 + Math.random() * 20;
+        
+        const startX = Math.cos(angle) * startR;
+        const startY = -55 + Math.sin(angle) * startR * 0.6;
+        const endX = Math.cos(angle) * endR;
+        const endY = -55 + Math.sin(angle) * endR * 0.6;
+        
+        this.tearGraphics.moveTo(startX, startY);
+        const midX = (startX + endX) / 2 + (Math.random() - 0.5) * 8;
+        const midY = (startY + endY) / 2 + (Math.random() - 0.5) * 8;
+        this.tearGraphics.quadraticCurveTo(midX, midY, endX, endY);
+      }
+      this.tearGraphics.endFill();
     }
   }
   
@@ -260,6 +318,9 @@ export class Player {
     const weather = this.game.weatherSystem.currentWeather;
     let rainDamage = 0;
     
+    const durabilityFactor = this.durability / 100;
+    const lowDurabilityPenalty = durabilityFactor < 0.3 ? 1.5 : (durabilityFactor < 0.5 ? 1.2 : 1);
+    
     if (weather === 'light') {
       rainDamage = this.umbrellaOpen ? 0.3 : 0.8;
     } else if (weather === 'moderate') {
@@ -270,11 +331,20 @@ export class Player {
       rainDamage = this.umbrellaOpen ? 3 : 8;
     }
     
+    rainDamage *= lowDurabilityPenalty;
+    
+    if (this.game.globalWindStrength > 0 && this.umbrellaOpen) {
+      rainDamage += this.game.globalWindStrength * 0.5;
+    }
+    
     if (this.waxProtection > 0) {
       rainDamage *= 0.5;
     }
     
-    if (this.isRepairing) {
+    if (this.game.isRepairing) {
+      this.durability += 20 * dt;
+      this.durability = Math.min(this.maxDurability, this.durability);
+    } else if (this.isRepairing) {
       this.durability += 10 * dt;
       this.durability = Math.min(this.maxDurability, this.durability);
     } else {

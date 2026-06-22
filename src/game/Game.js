@@ -34,7 +34,8 @@ export class Game {
       up: false,
       down: false,
       space: false,
-      r: false
+      r: false,
+      e: false
     };
     
     this.gameTime = 0;
@@ -53,6 +54,27 @@ export class Game {
     this.onSpeedUpdate = null;
     this.onWeatherUpdate = null;
     this.onGameOver = null;
+    this.onWarningUpdate = null;
+    this.onDeliveryTimeUpdate = null;
+    this.onRepairAvailable = null;
+    this.onUmbrellaTiltUpdate = null;
+    
+    this.deliveryTime = 0;
+    this.deliveryBonus = 0;
+    this.consecutiveDeliveries = 0;
+    
+    this.globalWindDirection = 0;
+    this.globalWindStrength = 0;
+    this.globalWindTimer = 0;
+    
+    this.isRepairing = false;
+    this.repairTimer = 0;
+    this.repairObstacle = null;
+    
+    this.shortcutActive = false;
+    this.shortcutTimer = 0;
+    
+    this.umbrellaTiltWarning = 0;
   }
   
   init() {
@@ -110,6 +132,19 @@ export class Game {
     this.currentLane = 1;
     this.targetLane = 1;
     
+    this.deliveryTime = 0;
+    this.deliveryBonus = 0;
+    this.consecutiveDeliveries = 0;
+    this.globalWindDirection = 0;
+    this.globalWindStrength = 0;
+    this.globalWindTimer = 0;
+    this.isRepairing = false;
+    this.repairTimer = 0;
+    this.repairObstacle = null;
+    this.shortcutActive = false;
+    this.shortcutTimer = 0;
+    this.umbrellaTiltWarning = 0;
+    
     this.player.reset();
     this.obstacleManager.reset();
     this.collectibleManager.reset();
@@ -128,7 +163,8 @@ export class Game {
       this.onGameOver({
         score: Math.floor(this.score),
         distance: Math.floor(this.distance),
-        maxSpeed: this.maxSpeed.toFixed(1)
+        maxSpeed: this.maxSpeed.toFixed(1),
+        deliveryBonus: this.deliveryBonus
       });
     }
   }
@@ -139,17 +175,32 @@ export class Game {
     const dt = delta / 60;
     this.gameTime += dt;
     this.difficultyTimer += dt;
+    this.deliveryTime += dt;
     
     this.updateDifficulty();
     this.updateLanePosition(dt);
+    this.updateGlobalWind(dt);
+    this.updateRepair(dt);
+    this.updateShortcut(dt);
+    this.updateUmbrellaTiltWarning(dt);
     
-    const speed = this.currentSpeed * this.speedMultiplier;
+    let effectiveSpeedMultiplier = this.speedMultiplier;
+    if (this.isRepairing) {
+      effectiveSpeedMultiplier = 0.3;
+    }
+    if (this.shortcutActive) {
+      effectiveSpeedMultiplier *= 1.8;
+    }
+    
+    const speed = this.currentSpeed * effectiveSpeedMultiplier;
     if (speed > this.maxSpeed) {
       this.maxSpeed = speed;
     }
     
     this.distance += speed * dt * 10;
     this.score += speed * dt * 0.5;
+    
+    this.deliveryBonus = Math.floor(this.deliveryTime / 10) * 50;
     
     this.background.update(dt, speed);
     this.weatherSystem.update(dt);
@@ -160,6 +211,69 @@ export class Game {
     
     this.checkCollisions();
     this.updateUI();
+  }
+  
+  updateGlobalWind(dt) {
+    this.globalWindTimer += dt;
+    if (this.globalWindTimer > 8) {
+      this.globalWindTimer = 0;
+      const rand = Math.random();
+      if (rand < 0.3) {
+        this.globalWindDirection = -1;
+        this.globalWindStrength = 1.5;
+      } else if (rand < 0.6) {
+        this.globalWindDirection = 1;
+        this.globalWindStrength = 1.5;
+      } else {
+        this.globalWindDirection = 0;
+        this.globalWindStrength = 0;
+      }
+    }
+    
+    if (this.globalWindStrength > 0 && this.player.umbrellaOpen) {
+      this.player.container.x += this.globalWindDirection * this.globalWindStrength * dt * 30;
+    }
+  }
+  
+  updateRepair(dt) {
+    if (this.isRepairing) {
+      this.repairTimer -= dt;
+      if (this.repairTimer <= 0) {
+        this.isRepairing = false;
+        if (this.repairObstacle) {
+          this.player.durability = Math.min(100, this.player.durability + this.repairObstacle.repairAmount);
+          this.consecutiveDeliveries++;
+          this.addScore(100 + this.consecutiveDeliveries * 20);
+          this.repairObstacle.used = true;
+        }
+        this.repairObstacle = null;
+        if (this.onRepairAvailable) {
+          this.onRepairAvailable({ available: false, progress: 0 });
+        }
+      } else {
+        if (this.onRepairAvailable) {
+          const progress = 1 - (this.repairTimer / (this.repairObstacle?.repairDuration || 2));
+          this.onRepairAvailable({ available: true, progress: progress });
+        }
+      }
+    }
+  }
+  
+  updateShortcut(dt) {
+    if (this.shortcutActive) {
+      this.shortcutTimer -= dt;
+      if (this.shortcutTimer <= 0) {
+        this.shortcutActive = false;
+      }
+    }
+  }
+  
+  updateUmbrellaTiltWarning(dt) {
+    if (this.globalWindStrength > 0 || this.player.windPushTimer > 0) {
+      this.umbrellaTiltWarning = Math.min(1, this.umbrellaTiltWarning + dt * 2);
+    } else {
+      this.umbrellaTiltWarning = Math.max(0, this.umbrellaTiltWarning - dt * 2);
+    }
   }
   
   updateDifficulty() {
@@ -238,6 +352,54 @@ export class Game {
         this.player.splashBoostTimer = 1.5;
         this.particleSystem.createSplash(obstacle.x, this.groundY);
         this.addScore(50);
+        
+        if (this.player.umbrellaOpen) {
+          this.player.durability -= 3;
+        }
+      }
+      return;
+    }
+    
+    if (obstacle.type === 'wind_chime' || obstacle.type === 'rain_curtain') {
+      if (!obstacle.triggered) {
+        obstacle.triggered = true;
+        if (obstacle.type === 'rain_curtain') {
+          if (this.onWarningUpdate) {
+            this.onWarningUpdate({ type: 'rain', message: '暴雨来袭！', duration: 2 });
+          }
+          this.weatherSystem.currentWeather = 'storm';
+          this.weatherSystem.updateRainIntensity();
+          setTimeout(() => {
+            if (this.weatherSystem) {
+              this.weatherSystem.currentWeather = 'heavy';
+              this.weatherSystem.updateRainIntensity();
+            }
+          }, 5000);
+        } else {
+          if (this.onWarningUpdate) {
+            this.onWarningUpdate({ type: 'wind', message: '强风预警！', duration: 2 });
+          }
+        }
+      }
+      return;
+    }
+    
+    if (obstacle.type === 'repair_stall') {
+      if (!obstacle.triggered && !obstacle.used && !this.isRepairing) {
+        if (this.onRepairAvailable) {
+          this.onRepairAvailable({ available: true, canRepair: this.player.durability < 100, stall: obstacle });
+        }
+      }
+      return;
+    }
+    
+    if (obstacle.type === 'shortcut') {
+      if (!obstacle.triggered) {
+        obstacle.triggered = true;
+        this.shortcutActive = true;
+        this.shortcutTimer = obstacle.boostDuration || 3;
+        this.player.durability -= obstacle.durabilityDamage || 5;
+        this.addScore(30);
       }
       return;
     }
@@ -256,6 +418,28 @@ export class Game {
       return;
     }
     
+    if (obstacle.type === 'alley' || obstacle.type === 'bridge_wind' || obstacle.type === 'building_gap') {
+      const windDir = obstacle.windDirection !== 0 ? obstacle.windDirection : (Math.random() > 0.5 ? 1 : -1);
+      const pushStrength = obstacle.strength * (this.player.umbrellaOpen ? 1.5 : 0.8);
+      
+      this.player.windPush = windDir * pushStrength;
+      this.player.windPushTimer = 0.5;
+      
+      let damage = obstacle.durabilityDamage;
+      if (this.player.umbrellaOpen) {
+        damage *= 0.6;
+        this.addScore(10);
+      } else {
+        damage *= 1.2;
+      }
+      this.player.durability -= damage;
+      
+      if (this.onWarningUpdate) {
+        this.onWarningUpdate({ type: 'wind', message: obstacle.type === 'alley' ? '巷口阵风！' : obstacle.type === 'bridge_wind' ? '桥面横风！' : '高楼夹缝气流！', duration: 1.5 });
+      }
+      return;
+    }
+    
     if (obstacle.type === 'lantern' || obstacle.type === 'narrow') {
       if (this.player.umbrellaOpen) {
         obstacle.triggered = true;
@@ -263,6 +447,7 @@ export class Game {
         this.player.umbrellaOpen = false;
         this.player.umbrellaCooldown = 1;
         this.addScore(-30);
+        this.consecutiveDeliveries = 0;
       }
       return;
     }
@@ -273,24 +458,27 @@ export class Game {
       this.addScore(-20);
       this.player.knockback = 3;
       this.player.knockbackTimer = 0.5;
+      this.consecutiveDeliveries = 0;
       return;
     }
     
     obstacle.triggered = true;
     this.player.durability -= obstacle.durabilityDamage || 10;
     this.addScore(-10);
+    this.consecutiveDeliveries = 0;
   }
   
   handleCollectible(collectible) {
     if (collectible.type === 'paper') {
       this.player.durability = Math.min(100, this.player.durability + 15);
-      this.addScore(100);
+      this.addScore(100 + this.consecutiveDeliveries * 10);
     } else if (collectible.type === 'wax') {
       this.player.durability = Math.min(100, this.player.durability + 25);
       this.player.waxProtection = 5;
-      this.addScore(150);
+      this.addScore(150 + this.consecutiveDeliveries * 15);
     } else if (collectible.type === 'coin') {
-      this.addScore(200);
+      this.addScore(200 + this.consecutiveDeliveries * 20);
+      this.consecutiveDeliveries++;
     }
   }
   
@@ -309,9 +497,43 @@ export class Game {
       this.onDurabilityUpdate(Math.max(0, this.player.durability));
     }
     if (this.onSpeedUpdate) {
-      const speedPercent = (this.currentSpeed * this.speedMultiplier / 15) * 100;
+      const effectiveMultiplier = this.speedMultiplier * (this.shortcutActive ? 1.8 : 1) * (this.isRepairing ? 0.3 : 1);
+      const speedPercent = (this.currentSpeed * effectiveMultiplier / 15) * 100;
       this.onSpeedUpdate(Math.min(100, speedPercent));
     }
+    if (this.onDeliveryTimeUpdate) {
+      this.onDeliveryTimeUpdate({
+        time: Math.floor(this.deliveryTime),
+        bonus: this.deliveryBonus,
+        consecutive: this.consecutiveDeliveries
+      });
+    }
+    
+    if (this.onUmbrellaTiltUpdate) {
+      const tiltDir = this.globalWindDirection;
+      const tiltIntensity = this.umbrellaTiltWarning * this.globalWindStrength;
+      this.onUmbrellaTiltUpdate(tiltDir, tiltIntensity);
+    }
+  }
+  
+  tryStartRepair() {
+    if (this.isRepairing) return;
+    
+    const playerBounds = this.player.getBounds();
+    const obstacles = this.obstacleManager.getObstacles();
+    
+    for (const obstacle of obstacles) {
+      if (obstacle.type === 'repair_stall' && !obstacle.used && obstacle.active) {
+        const obstacleBounds = obstacle.getBounds();
+        if (this.intersects(playerBounds, obstacleBounds)) {
+          this.isRepairing = true;
+          this.repairTimer = obstacle.repairDuration || 2;
+          this.repairObstacle = obstacle;
+          return true;
+        }
+      }
+    }
+    return false;
   }
   
   handleKeyDown(e) {
@@ -351,6 +573,12 @@ export class Game {
           this.player.repairUmbrella();
         }
         break;
+      case 'KeyE':
+        if (!this.keys.e) {
+          this.keys.e = true;
+          this.tryStartRepair();
+        }
+        break;
     }
   }
   
@@ -377,6 +605,9 @@ export class Game {
         break;
       case 'KeyR':
         this.keys.r = false;
+        break;
+      case 'KeyE':
+        this.keys.e = false;
         break;
     }
   }

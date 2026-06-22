@@ -18,15 +18,21 @@
           <li><span class="key">←</span><span class="key">→</span> 左右移动 / 贴墙转弯</li>
           <li><span class="key">空格</span> 开伞滑翔 / 收伞冲刺</li>
           <li><span class="key">R</span> 短暂修补伞面</li>
+          <li><span class="key">E</span> 在修伞摊停留修伞</li>
           <li><span class="key">↓</span> 快速下落</li>
         </ul>
       </div>
       <div class="tips">
         <h3>游戏提示</h3>
         <p>· 借屋檐避雨可减少伞面损耗</p>
-        <p>· 踩水坑可短暂加速</p>
-        <p>· 避开风口和障碍物</p>
-        <p>· 收集油纸和蜡块修复伞面</p>
+        <p>· 踩水坑可短暂加速，但会轻微损耗伞面</p>
+        <p>· 巷口、桥面、高楼夹缝会有周期性变风</p>
+        <p>· 开伞滑翔更远，但可能被吹偏撞上灯笼架</p>
+        <p>· 风铃预警强风，雨帘预警暴雨</p>
+        <p>· 伞快破时操作会变得迟钝摇晃</p>
+        <p>· 修伞摊可恢复耐久但会耽误时间</p>
+        <p>· 捷径可加速但会损耗伞面</p>
+        <p>· 收集金币和连续递送可获得额外奖励</p>
       </div>
       <button id="start-btn" class="btn-primary">开始游戏</button>
     </div>
@@ -41,6 +47,18 @@
         <div class="hud-item">
           <span class="hud-label">分数</span>
           <span id="score" class="hud-value">0</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">递送时间</span>
+          <span id="delivery-time" class="hud-value">0:00</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">连送奖励</span>
+          <span id="delivery-bonus" class="hud-value bonus-positive">+0</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">连送</span>
+          <span id="consecutive" class="hud-value consecutive">0</span>
         </div>
       </div>
       <div class="hud-left">
@@ -64,6 +82,23 @@
         <span id="weather-icon">🌧️</span>
         <span id="weather-text">小雨</span>
       </div>
+      
+      <div id="umbrella-tilt-indicator" class="umbrella-tilt-indicator">
+        <span id="tilt-arrow-left" class="tilt-arrow">←</span>
+        <span class="tilt-label">风力</span>
+        <span id="tilt-arrow-right" class="tilt-arrow">→</span>
+      </div>
+    </div>
+    
+    <div id="warning-container" class="warning-container">
+      <span id="warning-message" class="warning-message"></span>
+    </div>
+    
+    <div id="repair-prompt" class="repair-prompt">
+      <span class="repair-label">按 <span class="key">E</span> 修伞 (+35耐久)</span>
+      <div class="repair-progress-bar">
+        <div id="repair-progress-fill" class="repair-progress-fill"></div>
+      </div>
     </div>
 
     <div id="end-screen" class="screen">
@@ -80,6 +115,10 @@
         <div class="stat-item">
           <span class="stat-label">最高速度</span>
           <span id="final-speed" class="stat-value">0 m/s</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">时间奖励</span>
+          <span id="final-delivery-bonus" class="stat-value">0</span>
         </div>
       </div>
       <button id="restart-btn" class="btn-primary">再来一次</button>

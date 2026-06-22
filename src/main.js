@@ -8,6 +8,7 @@ window.__game = game;
 
 ui.init();
 game.init();
+ui.showStart();
 
 window.addEventListener('resize', () => {
   game.resize();
